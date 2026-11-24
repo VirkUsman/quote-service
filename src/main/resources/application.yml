@@ -1,0 +1,20 @@
+spring:
+  application:
+    name: quote-service
+  datasource:
+    url: ${DB_URL:jdbc:mysql://localhost:3306/quotes}
+    username: ${DB_USER:quotes}
+    password: ${DB_PASSWORD:quotes}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+  mvc:
+    problemdetails:
+      enabled: true
+
+quotes:
+  validity: PT30M
+  expiry-sweep-ms: 60000
