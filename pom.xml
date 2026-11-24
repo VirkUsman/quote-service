@@ -18,6 +18,8 @@
 
   <properties>
     <java.version>21</java.version>
+    <!-- Boot 3.4 manages 1.20.x, whose docker-java client is refused by Docker Engine 29. -->
+    <testcontainers.version>1.21.4</testcontainers.version>
   </properties>
 
   <dependencies>
