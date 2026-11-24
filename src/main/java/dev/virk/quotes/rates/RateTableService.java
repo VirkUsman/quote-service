@@ -6,8 +6,10 @@ import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
 public class RateTableService {
@@ -17,17 +19,36 @@ public class RateTableService {
     public record NewTable(Instant effectiveFrom, String currency, int fuelSurchargeBps,
                            int expressMultiplierBps, long minChargeCents, List<BandSpec> bands) {}
 
+    private static final int VERSION_ATTEMPTS = 25;
+
     private final RateTableRepository tables;
     private final Clock clock;
+    private final TransactionTemplate tx;
 
-    public RateTableService(RateTableRepository tables, Clock clock) {
+    public RateTableService(RateTableRepository tables, Clock clock, TransactionTemplate tx) {
         this.tables = tables;
         this.clock = clock;
+        this.tx = tx;
     }
 
-    @Transactional
+    /**
+     * Version is max + 1, read and inserted in one transaction. Two callers can read the same
+     * max; the unique index on version lets one insert through and the other retries with a
+     * fresh read. The index is what guarantees uniqueness, the retry just makes the loser succeed.
+     */
     public RateTable create(NewTable spec) {
         checkBands(spec.bands());
+        for (int attempt = 1; ; attempt++) {
+            try {
+                return tx.execute(status -> insertNext(spec));
+            } catch (DataIntegrityViolationException clash) {
+                if (attempt >= VERSION_ATTEMPTS) throw clash;
+                Thread.onSpinWait();
+            }
+        }
+    }
+
+    private RateTable insertNext(NewTable spec) {
         int next = tables.maxVersion() + 1;
         List<RateBand> bands = spec.bands().stream()
                 .map(b -> new RateBand(b.zone(), b.upToKg().setScale(2, java.math.RoundingMode.UNNECESSARY),
