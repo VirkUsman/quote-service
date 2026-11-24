@@ -1,0 +1,29 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      # ubuntu-latest ships Docker, which Testcontainers uses to start MySQL 8.
+      - name: Unit and integration tests
+        run: mvn --batch-mode verify
+
+      # Races that pass once prove little. Run the concurrency class a few more times.
+      - name: Repeat the race tests
+        run: |
+          for i in 1 2 3; do
+            mvn --batch-mode -q failsafe:integration-test failsafe:verify -Dit.test=ConcurrencyIT || exit 1
+          done
